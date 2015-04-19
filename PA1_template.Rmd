@@ -8,18 +8,117 @@ output:
 
 ## Loading and preprocessing the data
 
+The data can be read directly from the zip file provided using 'unz':
 
+```{r}
+activity <- read.csv(unz('activity.zip', 'activity.csv'))
+```
+
+No processing/transformation appears to be needed.
 
 ## What is mean total number of steps taken per day?
 
+Total number of steps taken per day:
 
+```{r}
+dayTotals <- aggregate(activity$steps, list(date=activity$date), sum, na.rm=T)
+names(dayTotals) <- c("date", "totalSteps")
+print(dayTotals)
+```
+
+Histogram of the total number of steps taken each day:
+
+```{r}
+hist(dayTotals$totalSteps)
+```
+
+Mean and median of the total number of steps taken per day:
+
+```{r}
+mean(dayTotals$totalSteps)
+median(dayTotals$totalSteps)
+```
 
 ## What is the average daily activity pattern?
 
+```{r}
+intervalMeans <- aggregate(activity$steps, list(interval=activity$interval), mean, na.rm=T)
+names(intervalMeans) <- c("interval", "meanSteps")
+plot(intervalMeans$interval, intervalMeans$meanSteps, type="l",
+     main="Steps per 5-minute interval averaged across all days")
+```
+
+The interval with the maximum number of steps is:
+
+```{r}
+max.steps <- max(intervalMeans$meanSteps)
+filteredInterval <- intervalMeans[intervalMeans$meanSteps == max.steps, ]
+print(filteredInterval)
+print(filteredInterval$interval)
+```
 
 
 ## Imputing missing values
 
+Total number of rows with NAs:
 
+```{r}
+sum(!complete.cases(activity))
+```
+
+The missing values only appear in "steps". The strategy used to fill them in will be to replace each one with thr mean for the corresponding 5-minute interval as calculated above (in intervalMeans):
+
+```{r}
+imputed = activity
+for(i in seq_len(nrow(imputed))) {
+  if(is.na(imputed$steps[i])) {
+    thisInterval <- imputed$interval[i]
+    replacementValue <- (intervalMeans[intervalMeans$interval==thisInterval,])$meanSteps
+    imputed$steps[i] <- replacementValue
+  }
+}
+```
+
+Now *imputed* is equal to  *activity* but with missing values filled in.
+
+A histogram of number of steps taken per day, and the mean and median, are given below:
+
+```{r}
+imputedDayTotals <- aggregate(imputed$steps, list(date=imputed$date), sum)
+names(imputedDayTotals) <- c("date", "totalSteps")
+hist(imputedDayTotals$totalSteps)
+mean(imputedDayTotals$totalSteps)
+median(imputedDayTotals$totalSteps)
+```
+
+The values clearly differ from the estimates in the from the first part of the assignment. The histogram is more symmetrical with the first bar (0-5000) being clearly smaller. The mean and median are both greater than before. The new mean and median are equal to each other which is a suprising coincidence (we would expect them to be similar as the histogram is fairly symmetrical we not exactly equal).
+
+The main impact of imputing missing data has been remove the effect of days when little or no data was collected, which is why the first bar of the histogram has become a lot smaller.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Adding new factor variable with levels "weekday" and "weekend" to *imputed*:
+
+```{r}
+daysOfWeek = weekdays(as.Date(imputed$date))
+isWeekend <- daysOfWeek=="Saturday" | daysOfWeek=="Sunday"
+imputed$weekend = as.factor(ifelse(isWeekend, "weekend", "weekday"))
+summary(imputed)
+```
+
+To create a panel plot using R's basic graphics, I define a function that returns the mean steps for each interval for a given data frame, and then called it for two different filtered versions of *imputed*, then plot both results.:
+
+```{r}
+meanStepsPerInterval <- function(df) {
+  means <- aggregate(df$steps, list(interval=df$interval), mean, na.rm=T)
+  names(means) <- c("interval", "steps")
+  means
+}
+
+weekdayMeans <- meanStepsPerInterval(imputed[imputed$weekend == 'weekday',])
+weekendMeans <- meanStepsPerInterval(imputed[imputed$weekend == 'weekend',])
+
+par(mfrow=c(2,1))
+plot(weekendMeans$interval, weekendMeans$steps, type="l", main="weekend")
+plot(weekdayMeans$interval, weekdayMeans$steps, type="l", main="weekday")
+```
